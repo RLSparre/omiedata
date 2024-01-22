@@ -10,7 +10,6 @@ import requests
 from bs4 import BeautifulSoup
 from requests.models import Response
 
-from omiedata import tools
 
 
 class OMIE:
@@ -433,3 +432,6 @@ class OMIE:
         self.skip_rows = 3
         self.col_dict = self.create_col_dict('trades')
         return self._get_data(end_url)
+
+
+
