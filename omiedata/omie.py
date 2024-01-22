@@ -401,7 +401,7 @@ class OMIE:
             str indicating which country to get prices for
         :return: pd.DataFrame
         """
-        raw_url = self.url_dict['intraday_hourly_prices']
+        raw_url = self.url_dict['day_ahead_hourly_prices']
         end_url = raw_url.replace('{insert_country}', country.capitalize())
         self.suffix_list = None
         self.skip_rows = 1
