@@ -3,7 +3,8 @@ from unittest.mock import patch, Mock
 import pandas as pd
 import pytest
 
-from omiedata.omie import OMIE, Response
+from omiedata import OMIE
+from requests.models import Response
 
 
 @pytest.fixture
