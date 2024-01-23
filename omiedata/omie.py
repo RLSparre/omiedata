@@ -199,7 +199,7 @@ class OMIE:
         # format df
         formatted_df = self._format_df(raw_df, self.col_dict)
 
-        return formatted_df
+        return formatted_df.reset_index(drop=True)
 
 
     def _load_data(self, response: Response) -> pd.DataFrame:
