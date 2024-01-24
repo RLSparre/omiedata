@@ -1,11 +1,12 @@
+aiohttp==3.9.1
 beautifulsoup4==4.12.2
 certifi==2023.11.17
 charset-normalizer==3.3.2
 colorama==0.4.6
+dask==2024.1.0
 idna==3.6
 iniconfig==2.0.0
 numpy==1.26.3
-omiedata @ file:///C:/Users/rasmu/OneDrive/Dokumenter/Projects/watt
 packaging==23.2
 pandas==2.1.4
 pluggy==1.3.0

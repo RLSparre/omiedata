@@ -3,12 +3,13 @@ import json
 import os
 import zipfile
 from itertools import product
-
+from dask import delayed, compute
 import numpy as np
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 from requests.models import Response
+import time
 
 
 
@@ -91,43 +92,6 @@ class OMIE:
 
 
     @staticmethod
-    def _load_dataframe(file: str | zipfile.ZipExtFile, skip_rows: int) -> pd.DataFrame:
-        """
-        Function to load dataframe from URL or zipfile
-
-        :param file: str | zipfile.ZipExtFile
-            URL to file or zipfile
-        :param skip_rows: int
-            Number of rows to skip when reading csv file
-        :return: pd.DataFrame
-            DataFrame with data from URL or zipfile with minor formatting
-        """
-        filename = file if type(file) == str else file.name
-
-        int_str = filename.split('_')[-1].split('.')[0]
-        date_str = int_str[:8]
-
-        encoding = 'latin1' if filename.split('_')[0] in ('orders', 'trades') else None
-
-        df = pd.read_csv(
-            file,
-            delimiter=';',
-            skiprows=skip_rows,
-            skipfooter=1,
-            header=None,
-            engine='python',
-            encoding=encoding
-        ).iloc[:, :-1]
-        df.insert(0, 'file_date', pd.to_datetime(date_str, format='%Y%m%d'))
-
-        # if length of integer strings exceeds 8, the additional ints indicates auction round
-        if len(int_str) > 8:
-            df['auction_number'] = int(int_str[8:])
-
-        return df
-
-
-    @staticmethod
     def _generate_date_strings(start_date: str, end_date: str, suffix_list: None | list = None):
         """
         Generate list of date strings ('%Y%m%d') (a string for unique suffixes) and file type suffix '.csv' between
@@ -153,21 +117,108 @@ class OMIE:
 
 
     @staticmethod
-    def _format_df(df: pd.DataFrame, col_dict: dict) -> pd.DataFrame:
+    def create_col_dict(col_format: str, **kwargs) -> dict:
         """
-        Function to format provided dataframe: map integer column names to informative string column names
+        Function to generate a dictionary for mapping integer column names to indicative string column names
 
-        :param df: pd.DataFrame
-        :param col_dict: dict
-            dictionary with mapping from integers to strings
+        :param col_format: str
+            str indicating, which mapping to use
+        :param kwargs:
+            Some cases are country-specific
+        :return: dict
+            dictionary with mapping
+        """
+
+        if col_format == 'auction':
+            country = kwargs.get('country', None)
+            price_col = 4 if country.lower() == 'spain' else 5
+            col_dict = {
+                0: 'year',
+                1: 'month',
+                2: 'day',
+                3: 'hour',
+                price_col: 'price'
+            }
+
+        elif col_format == 'orders':
+            col_names = [
+                'date',
+                'contract',
+                'zone',
+                'agent',
+                'unit',
+                'price',
+                'quantity',
+                'offer_type',
+                'execution_conditions',
+                'validity_conditions',
+                'reduced_quantity',
+                'ppd',
+                'order_time'
+            ]
+            col_dict = dict(enumerate(col_names))
+
+        elif col_format == 'trades':
+            col_names = [
+                'date',
+                'contract',
+                'buy_agent',
+                'buy_unit',
+                'buy_zone',
+                'sell_agent',
+                'sell_unit',
+                'sell_zone',
+                'price',
+                'quantity',
+                'transaction_time'
+            ]
+            col_dict = dict(enumerate(col_names))
+
+        return col_dict
+
+
+    @staticmethod
+    @delayed
+    def _delayed_load_dataframe(file: str | bytes, skip_rows: int, **kwargs) -> pd.DataFrame:
+        """
+        Function to load dataframe using dask.Delayed from URL or zipfile
+
+        :param file: str | bytes
+            URL to file or bytes
+        :param skip_rows: int
+            Number of rows to skip when reading csv file
+        :param kwargs:
+            Provide file name if file is bytes
         :return: pd.DataFrame
+            DataFrame with data from URL or zipfile with minor formatting
         """
-        df.rename(columns=col_dict, inplace=True)
 
-        # only keep column names that are str
-        str_column_names = [col for col in df.columns if isinstance(col, str)]
+        if isinstance(file, bytes):
+            filename = kwargs.get('alt_filename', None)
+            file = io.StringIO(file.decode('latin1'))
+        else:
+            filename = file
 
-        return df[str_column_names]
+        int_str = filename.split('_')[-1].split('.')[0]
+        date_str = int_str[:8]
+
+
+        df = pd.read_csv(
+            file,
+            delimiter=';',
+            skiprows=skip_rows,
+            skipfooter=1,
+            header=None,
+            engine='python'
+        ).iloc[:, :-1]
+
+        df['file_date'] = pd.to_datetime(date_str, format='%Y%m%d')
+
+        # if length of integer string exceeds 8, the additional ints indicate an auction round
+        if len(int_str) > 8:
+            df['auction_number'] = int(int_str[8:])
+
+        return df
 
 
     def _get_data(self, end_url: str, **kwargs) -> pd.DataFrame:
@@ -270,108 +321,87 @@ class OMIE:
         file_mask = mask_url_yyyymmdd | mask_url_short
         end_urls = list(end_urls[file_mask])
 
-        # TODO: figure out how to parallelize i/o in a smart way
-        # load_func = partial(self._load_csv_or_zip, date_strings=date_strings, mask_date_string=mask_date_string)
-        # with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        #    dfs = list(executor.map(load_func, end_urls))
+        # list to store delayed computations
+        delayed_reads = []
 
-        dfs = []
-        for end_url in end_urls:
-
-            if end_url.split('.')[-1] == 'zip':
-                # use mask_date_string to mask the files not in urls -> these must be in zip files
-                dates_in_zip = np.array(date_strings)[~mask_date_string]
-
-                # yyyy of .zip file
-                zip_yyyy = end_url.split('_')[-1][:4]
-
-                # dates in given .zip file
-                files_in_zip = [x for x in dates_in_zip if x[:4] == zip_yyyy]
-
-                # extract the 'name' of the file found between last '=' and '_'
-                url_name = end_url.split('=')[-1].split('_')[0]
-
-                # create csv file names
-                csv_files = [f'{url_name}_{x}.1' for x in files_in_zip]
-
-                # fetch response
-                zip_response = self._fetch_url_data(self.base_url + end_url)
-
-                # open zip file
-                with zipfile.ZipFile(io.BytesIO(zip_response.content)) as zip_file:
-
-                    # read csv files in zip file
-                    for csv_filename in csv_files:
-                        with zip_file.open(csv_filename) as csv_file:
-                            df = self._load_dataframe(csv_file, self.skip_rows)
-                            dfs.append(df)
-
-            else:
-                df = self._load_dataframe(self.base_url + end_url, self.skip_rows)
-                dfs.append(df)
-
-        return pd.concat(dfs)
+        ### handle .csv files
+        csv_urls = [x for x in end_urls if x[-2:] == '.1']
+        if len(csv_urls) != 0:
+            delayed_reads.extend(
+                [
+                    self._delayed_load_dataframe(self.base_url + end_url, self.skip_rows)
+                    for end_url in csv_urls
+                ]
+            )
 
 
-    @staticmethod
-    def create_col_dict(col_format: str, **kwargs) -> dict:
+        ### handle .zip files
+        zip_urls = [x for x in end_urls if x[-4:] == '.zip']
+        # use mask_date_string to mask the files not in urls -> these must be in zip files
+        dates_in_zip = np.array(date_strings)[~mask_date_string]
+
+        delayed_dfs = []
+
+        for end_url in zip_urls:
+            # yyyy of .zip file
+            zip_yyyy = end_url.split('_')[-1][:4]
+
+            # dates in given .zip file
+            files_in_zip = [x for x in dates_in_zip if x[:4] == zip_yyyy]
+
+            # extract the 'name' of the file found between last '=' and '_'
+            url_name = end_url.split('=')[-1].split('_')[0]
+
+            # create csv file names
+            csv_files = [f'{url_name}_{x}.1' for x in files_in_zip]
+
+            # fetch response
+            zip_response = self._fetch_url_data(self.base_url + end_url)
+
+            # open zip file, open csv files in zip file, read them, and store them in delayed_dfs list
+            with zipfile.ZipFile(io.BytesIO(zip_response.content)) as zip_file:
+                for csv_filename in csv_files:
+                    with zip_file.open(csv_filename) as csv_file:
+                        csv_content = csv_file.read()
+                        delayed_reads.append(
+                            self._delayed_load_dataframe(csv_content, self.skip_rows, alt_filename=csv_filename)
+                        )
+
+        # compute
+        dfs_delayed = compute(*delayed_reads)
+
+        return pd.concat(dfs_delayed)
+
+
+    def _format_df(self, df: pd.DataFrame, col_dict: dict) -> pd.DataFrame:
         """
-        Function to generate a dictionary for mapping integer column names to indicative string column names
+        Function to format provided dataframe: map integer column names to informative string column names
 
-        :param col_format: str
-            str indicating, which mapping to use
-        :param kwargs:
-            Some cases are country-specific
-        :return: dict
-            dictionary with mapping
+        :param df: pd.DataFrame
+        :param col_dict: dict
+            dictionary with mapping from integers to strings
+        :return: pd.DataFrame
         """
+        df.rename(columns=col_dict, inplace=True)
 
-        if col_format == 'auction':
-            country = kwargs.get('country', None)
-            price_col = 4 if country.lower() == 'spain' else 5
-            col_dict = {
-                0: 'year',
-                1: 'month',
-                2: 'day',
-                3: 'hour',
-                price_col: 'price'
-            }
+        # only keep column names that are str
+        str_column_names = [col for col in df.columns if isinstance(col, str)]
+        df = df[str_column_names]
 
-        elif col_format == 'orders':
-            col_names = [
-                'date',
-                'contract',
-                'zone',
-                'agent',
-                'unit',
-                'price',
-                'quantity',
-                'offer_type',
-                'execution_conditions',
-                'validity_conditions',
-                'reduced_quantity',
-                'ppd',
-                'order_time'
-            ]
-            col_dict = dict(enumerate(col_names))
+        if self.type == 'auction':
+            sort_cols = str_column_names[:4]  # yyyy, mm, dd, hh
+            if 'auction_number' in df.columns:
+                sort_cols.append('auction_number')
 
-        elif col_format == 'trades':
-            col_names = [
-                'date',
-                'contract',
-                'buy_agent',
-                'buy_unit',
-                'buy_zone',
-                'sell_agent',
-                'sell_unit',
-                'sell_zone',
-                'price',
-                'quantity',
-                'transaction_time'
-            ]
-            col_dict = dict(enumerate(col_names))
+        elif self.type == 'orders':
+            sort_cols = ['date', 'order_time']
 
-        return col_dict
+        else:
+            sort_cols = ['date', 'transaction_time']
+
+        df = df.sort_values(sort_cols, ascending=False)
+
+        return df
 
 
     def intraday_hourly_prices(self, country: str = 'Spain') -> pd.DataFrame:
@@ -386,8 +416,8 @@ class OMIE:
         end_url = raw_url.replace('{insert_country}', country.capitalize())
         self.suffix_list = ['01', '02', '03', '04', '05', '06']
         self.skip_rows = 1
-        self.encoding = 'latin1'
-        self.col_dict = self.create_col_dict('auction', country=country)
+        self.type = 'auction'
+        self.col_dict = self.create_col_dict(self.type, country=country)
 
         return self._get_data(end_url, country=country)
 
@@ -404,7 +434,8 @@ class OMIE:
         end_url = raw_url.replace('{insert_country}', country.capitalize())
         self.suffix_list = None
         self.skip_rows = 1
-        self.col_dict = self.create_col_dict('auction', country=country)
+        self.type = 'auction'
+        self.col_dict = self.create_col_dict(self.type, country=country)
         return self._get_data(end_url, country=country)
 
 
@@ -417,7 +448,8 @@ class OMIE:
         end_url = self.url_dict['continuous_bids']
         self.suffix_list = None
         self.skip_rows = 3
-        self.col_dict = self.create_col_dict('orders')
+        self.type = 'orders'
+        self.col_dict = self.create_col_dict(self.type)
         return self._get_data(end_url)
 
 
@@ -430,8 +462,8 @@ class OMIE:
         end_url = self.url_dict['continuous_trades']
         self.suffix_list = None
         self.skip_rows = 3
-        self.col_dict = self.create_col_dict('trades')
+        self.type = 'trades'
+        self.col_dict = self.create_col_dict(self.type)
         return self._get_data(end_url)
-
 
 

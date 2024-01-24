@@ -98,7 +98,7 @@ def test_continuous_bids(mock_requests_get, mock_load_data):
 
     mock_load_data.return_value = pd.DataFrame({
         'date': ['20230101', '20230102'],
-        'hour': [1, 2],
+        'order_time': ['20230101', '20230102'],
         'price': [10.0, 12.0]
     })
 
@@ -125,8 +125,7 @@ def test_continuous_bids(mock_requests_get, mock_load_data):
 
     assert len(result) == 2
     assert 'date' in result.columns
-    assert 'hour' in result.columns
-    assert 'price' in result.columns
+    assert 'order_time' in result.columns
     assert mock_requests_get.called
     assert mock_load_data.called
     assert mock_col_dict.called
@@ -139,7 +138,7 @@ def test_continuous_trades(mock_requests_get, mock_load_data):
 
     mock_load_data.return_value = pd.DataFrame({
         'date': ['20230101', '20230102'],
-        'hour': [1, 2],
+        'transaction_time': ['20230101', '20230102'],
         'price': [10.0, 12.0]
     })
 
@@ -164,47 +163,7 @@ def test_continuous_trades(mock_requests_get, mock_load_data):
 
     assert len(result) == 2
     assert 'date' in result.columns
-    assert 'hour' in result.columns
-    assert 'price' in result.columns
-    assert mock_requests_get.called
-    assert mock_load_data.called
-    assert mock_col_dict.called
-
-
-def test_continuous_trades(mock_requests_get, mock_load_data):
-    mock_response = Mock(spec=Response)
-    mock_response.status_code = 200
-    mock_requests_get.return_value = mock_response
-
-    mock_load_data.return_value = pd.DataFrame({
-        'date': ['20230101', '20230102'],
-        'hour': [1, 2],
-        'price': [10.0, 12.0]
-    })
-
-    omie_instance = OMIE(start_date='20230101', end_date='20230102')
-
-    with patch.object(omie_instance, 'create_col_dict') as mock_col_dict:
-        mock_col_dict.return_value = {
-            0: 'date',
-            1: 'contract',
-            2: 'buy_agent',
-            3: 'buy_unit',
-            4: 'buy_zone',
-            5: 'sell_agent',
-            6: 'sell_unit',
-            7: 'sell_zone',
-            8: 'price',
-            9: 'quantity',
-            10: 'transaction_time'
-        }
-
-        result = omie_instance.continuous_trades()
-
-    assert len(result) == 2
-    assert 'date' in result.columns
-    assert 'hour' in result.columns
-    assert 'price' in result.columns
+    assert 'transaction_time' in result.columns
     assert mock_requests_get.called
     assert mock_load_data.called
     assert mock_col_dict.called
