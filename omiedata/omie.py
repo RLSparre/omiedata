@@ -276,7 +276,7 @@ class OMIE:
 
         else:
             # extract implied start and end dates from first and last url (if yyyy, pd.to_datetime sets it as yyyy-01-01
-            start_date = str(end_urls)[-1].split('_')[-1].split('.')[0]
+            start_date = str(end_urls[-1]).split('_')[-1].split('.')[0]
             end_date = str(end_urls[0]).split('_')[-1].split('.')[0][:8]
             date_strings = self._generate_date_strings(
                 start_date,
@@ -466,4 +466,7 @@ class OMIE:
         self.col_dict = self.create_col_dict(self.type)
         return self._get_data(end_url)
 
+
+d = OMIE()
+d.day_ahead_hourly_prices(country='Spain')
 
