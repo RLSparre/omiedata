@@ -361,11 +361,14 @@ class OMIE:
             # open zip file, open csv files in zip file, read them, and store them in delayed_dfs list
             with zipfile.ZipFile(io.BytesIO(zip_response.content)) as zip_file:
                 for csv_filename in csv_files:
-                    with zip_file.open(csv_filename) as csv_file:
-                        csv_content = csv_file.read()
-                        delayed_reads.append(
-                            self._delayed_load_dataframe(csv_content, self.skip_rows, alt_filename=csv_filename)
-                        )
+                    try:
+                        with zip_file.open(csv_filename) as csv_file:
+                            csv_content = csv_file.read()
+                            delayed_reads.append(
+                                self._delayed_load_dataframe(csv_content, self.skip_rows, alt_filename=csv_filename)
+                            )
+                    except KeyError as e:
+                        print(f'Missing filing.')
 
         # compute
         dfs_delayed = compute(*delayed_reads)
@@ -466,7 +469,4 @@ class OMIE:
         self.col_dict = self.create_col_dict(self.type)
         return self._get_data(end_url)
 
-
-d = OMIE()
-d.day_ahead_hourly_prices(country='Spain')
 
