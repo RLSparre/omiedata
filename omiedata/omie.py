@@ -149,7 +149,7 @@ class OMIE:
                 'unit',
                 'price',
                 'quantity',
-                'offer_type',
+                'order_type',
                 'execution_conditions',
                 'validity_conditions',
                 'reduced_quantity',
@@ -399,6 +399,9 @@ class OMIE:
         elif self.type == 'orders':
             sort_cols = ['date', 'order_time']
 
+            # map order_type column values. Values are in Spanish (C for 'Comprar' ('buy'), V for 'Vender' ('sell'))
+            df['order_type'] = df['order_type'].map({'C': 'buy', 'V': 'sell'})
+
         else:
             sort_cols = ['date', 'transaction_time']
 
@@ -442,13 +445,13 @@ class OMIE:
         return self._get_data(end_url, country=country)
 
 
-    def continuous_bids(self) -> pd.DataFrame:
+    def continuous_orders(self) -> pd.DataFrame:
         """
-        Function to get bids sent to intraday continuous market
+        Function to get orders sent to intraday continuous market
 
         :return: pd.Dataframe
         """
-        end_url = self.url_dict['continuous_bids']
+        end_url = self.url_dict['continuous_orders']
         self.suffix_list = None
         self.skip_rows = 3
         self.type = 'orders'

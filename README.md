@@ -6,7 +6,7 @@ Using omiedata allows one to access data for
 - day-ahead auction hourly market prices
 - intraday auction hourly market prices
 - continuous intraday market trades, and
-- continuous intraday market bids
+- continuous intraday market orders
 
 
 ## Installation
@@ -39,8 +39,8 @@ df_intraday = omie_instance.intraday_hourly_prices(country='Portugal')
 # get trades on intraday continuous market
 df_trades = omie_instance.continuous_trades()
 
-# get bids sent on intraday continuous market
-df_bids = omie_instance.continuous_bids()
+# get orders sent on intraday continuous market
+df_orders = omie_instance.continuous_orders()
 ```
 
 ## Additional data sources

@@ -91,7 +91,7 @@ def test_day_ahead_hourly_prices(mock_requests_get, mock_load_data):
     assert mock_col_dict.called
 
 
-def test_continuous_bids(mock_requests_get, mock_load_data):
+def test_continuous_orders(mock_requests_get, mock_load_data):
     mock_response = Mock(spec=Response)
     mock_response.status_code = 200
     mock_requests_get.return_value = mock_response
@@ -113,7 +113,7 @@ def test_continuous_bids(mock_requests_get, mock_load_data):
             4: 'unit',
             5: 'price',
             6: 'quantity',
-            7: 'offer_type',
+            7: 'order_type',
             8: 'execution_conditions',
             9: 'validity_conditions',
             10: 'reduced_quantity',
@@ -121,7 +121,7 @@ def test_continuous_bids(mock_requests_get, mock_load_data):
             12: 'order_time'
         }
 
-        result = omie_instance.continuous_bids()
+        result = omie_instance.continuous_orders()
 
     assert len(result) == 2
     assert 'date' in result.columns
