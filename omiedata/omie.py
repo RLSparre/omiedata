@@ -1,16 +1,18 @@
 import io
 import json
+import locale
 import os
 import zipfile
 from itertools import product
-from dask import delayed, compute
+
 import numpy as np
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+from dask import delayed, compute
 from requests.models import Response
-import time
 
+locale.setlocale(locale.LC_NUMERIC, "es_ES")
 
 
 class OMIE:
@@ -221,6 +223,21 @@ class OMIE:
         return df
 
 
+    @staticmethod
+    def _atof_float_conversion(x: pd.Series) -> pd.Series:
+        """
+        Function to series of 'Spanish floats' to floats
+
+        :param x: pd.Series
+            series of 'Spanish floats' to convert
+        :return: pd.Series
+            series converted to floats
+        """
+        return x.apply(
+            lambda val: locale.atof(val) if not pd.isna(val) else np.nan
+        )
+
+
     def _get_data(self, end_url: str, **kwargs) -> pd.DataFrame:
         """
         Main function to get data. Subfunctions obtain the data, cleans it and concatenates it to a unified dataframe
@@ -392,18 +409,35 @@ class OMIE:
         df = df[str_column_names]
 
         if self.type == 'auction':
+            # float cols to convert from Spanish format (e.g. using ',' separator)
+            float_cols = ['price']
+
+            # columns to sort by
             sort_cols = str_column_names[:4]  # yyyy, mm, dd, hh
             if 'auction_number' in df.columns:
                 sort_cols.append('auction_number')
 
         elif self.type == 'orders':
+            # float cols to convert from Spanish format (e.g. using ',' separator)
+            float_cols = ['price', 'quantity', 'reduced_quantity']
+
+            # columns to sort by
             sort_cols = ['date', 'order_time']
 
             # map order_type column values. Values are in Spanish (C for 'Comprar' ('buy'), V for 'Vender' ('sell'))
             df['order_type'] = df['order_type'].map({'C': 'buy', 'V': 'sell'})
 
-        else:
+        elif self.type == 'trades':
+            # float cols to convert from Spanish format (e.g. using ',' separator)
+            float_cols = ['price', 'quantity']
+
+            # columns to sort by
             sort_cols = ['date', 'transaction_time']
+
+        else:
+            raise ValueError(f'type: {self.type} not supported')
+
+        df.loc[:, float_cols] = df.loc[:, float_cols].apply(self._atof_float_conversion)
 
         df = df.sort_values(sort_cols, ascending=False)
 
@@ -471,5 +505,3 @@ class OMIE:
         self.type = 'trades'
         self.col_dict = self.create_col_dict(self.type)
         return self._get_data(end_url)
-
-
