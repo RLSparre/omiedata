@@ -233,6 +233,9 @@ class OMIE:
         :return: pd.Series
             series converted to floats
         """
+        if x.dtype != 'O':
+            return x
+
         return x.apply(
             lambda val: locale.atof(val) if not pd.isna(val) else np.nan
         )
