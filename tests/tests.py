@@ -156,3 +156,35 @@ def test_continuous_trades(mock_requests_get, mock_load_data):
     assert 'transaction_time' in result.columns
     assert mock_requests_get.called
     assert mock_load_data.called
+
+
+def test_continuous_summary_prices(mock_requests_get, mock_load_data):
+    mock_response = Mock(spec=Response)
+    mock_response.status_code = 200
+    mock_requests_get.return_value = mock_response
+
+    mock_load_data.return_value = pd.DataFrame({
+        'date': ['20230101', '20230102'],
+        'year': [2023, 2023],
+        'month': [1, 1],
+        'day': [1, 2],
+        'hour': [1, 2],
+        'max_price': [100.0, 120.0],
+        'min_price': [10.0, 12.0],
+        'weighted_price': [50.0, 60.0]
+    })
+
+    omie_instance = OMIE(start_date='20230101', end_date='20230102')
+
+    result = omie_instance.continuous_summary_prices(country='Spain')
+
+    assert len(result) == 2
+    assert 'year' in result.columns
+    assert 'month' in result.columns
+    assert 'day' in result.columns
+    assert 'hour' in result.columns
+    assert 'max_price' in result.columns
+    assert 'min_price' in result.columns
+    assert 'weighted_price' in result.columns
+    assert mock_requests_get.called
+    assert mock_load_data.called

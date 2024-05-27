@@ -176,6 +176,20 @@ class OMIE:
             ]
             col_dict = dict(enumerate(col_names))
 
+        elif col_format == 'continuous_summary':
+            country = kwargs.get('country', None)
+            price_col = 4 if country.lower() == 'spain' else 5
+            col_offset = 3
+            col_dict = {
+                0: 'year',
+                1: 'month',
+                2: 'day',
+                3: 'hour',
+                price_col: 'max_price',
+                price_col + 1 * col_offset: 'min_price',
+                price_col + 2 * col_offset: 'weighted_price'
+            }
+
         return col_dict
 
 
@@ -201,6 +215,8 @@ class OMIE:
         else:
             filename = file
 
+        encoding_type = kwargs.get('encoding_type', None)
+
         int_str = filename.split('_')[-1].split('.')[0]
         date_str = int_str[:8]
 
@@ -211,7 +227,8 @@ class OMIE:
             skiprows=skip_rows,
             skipfooter=1,
             header=None,
-            engine='python'
+            engine='python',
+            encoding=encoding_type
         ).iloc[:, :-1]
 
         df['file_date'] = pd.to_datetime(date_str, format='%Y%m%d')
@@ -349,7 +366,7 @@ class OMIE:
         if len(csv_urls) != 0:
             delayed_reads.extend(
                 [
-                    self._delayed_load_dataframe(self.base_url + end_url, self.skip_rows)
+                    self._delayed_load_dataframe(self.base_url + end_url, self.skip_rows, encoding_type=self.encoding)
                     for end_url in csv_urls
                 ]
             )
@@ -437,6 +454,13 @@ class OMIE:
             # columns to sort by
             sort_cols = ['date', 'transaction_time']
 
+        elif self.type == 'continuous_summary':
+            # float cols to convert from Spanish format (e.g. using ',' separator)
+            float_cols = df.columns[df.columns.str.contains('price')]
+
+            # columns to sort by
+            sort_cols = ['year', 'month', 'day', 'hour']
+
         else:
             raise ValueError(f'type: {self.type} not supported')
 
@@ -460,6 +484,7 @@ class OMIE:
         self.suffix_list = ['01', '02', '03', '04', '05', '06']
         self.skip_rows = 1
         self.type = 'auction'
+        self.encoding = None
         self.col_dict = self.create_col_dict(self.type, country=country)
 
         return self._get_data(end_url, country=country)
@@ -478,6 +503,7 @@ class OMIE:
         self.suffix_list = None
         self.skip_rows = 1
         self.type = 'auction'
+        self.encoding = None
         self.col_dict = self.create_col_dict(self.type, country=country)
         return self._get_data(end_url, country=country)
 
@@ -492,6 +518,7 @@ class OMIE:
         self.suffix_list = None
         self.skip_rows = 3
         self.type = 'orders'
+        self.encoding = None
         self.col_dict = self.create_col_dict(self.type)
         return self._get_data(end_url)
 
@@ -506,5 +533,28 @@ class OMIE:
         self.suffix_list = None
         self.skip_rows = 3
         self.type = 'trades'
+        self.encoding = None
         self.col_dict = self.create_col_dict(self.type)
         return self._get_data(end_url)
+
+
+    def continuous_summary_prices(self, country: str = 'Spain') -> pd.DataFrame:
+        """
+        Function to get summary prices (min, max, weighted) price for each hour of the continuous market
+        """
+        end_url = self.url_dict['continuous_summary_prices']
+        self.suffix_list = None
+        self.skip_rows = 3
+        self.type = 'continuous_summary'
+        self.encoding = 'latin1'
+        self.col_dict = self.create_col_dict(self.type, country=country)
+        return self._get_data(end_url, country=country)
+
+
+omie = OMIE(start_date='20240501', end_date='20240510')
+sum_prices = omie.continuous_summary_prices()
+
+
+
+
+
