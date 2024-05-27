@@ -5,8 +5,9 @@ OMIE manages the day-ahead and intraday electricity markets for the Iberian Peni
 Using omiedata allows one to access data for 
 - day-ahead auction hourly market prices
 - intraday auction hourly market prices
-- continuous intraday market trades, and
-- continuous intraday market orders
+- continuous intraday market trades,
+- continuous intraday market orders, and
+- summary prices for continuous intraday market
 
 
 ## Installation
@@ -41,6 +42,9 @@ df_trades = omie_instance.continuous_trades()
 
 # get orders sent on intraday continuous market
 df_orders = omie_instance.continuous_orders()
+
+# get summary prices (max, min, weighted) on intraday continuous market for e.g. Spain
+df_intraday_summary = omie_instance.continuous_summary_prices(country='Spain')
 ```
 
 ## Additional data sources
