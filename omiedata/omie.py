@@ -550,11 +550,3 @@ class OMIE:
         self.col_dict = self.create_col_dict(self.type, country=country)
         return self._get_data(end_url, country=country)
 
-
-omie = OMIE(start_date='20240501', end_date='20240510')
-sum_prices = omie.continuous_summary_prices()
-
-
-
-
-
